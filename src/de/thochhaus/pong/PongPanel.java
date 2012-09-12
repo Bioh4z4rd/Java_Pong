@@ -38,6 +38,9 @@ public class PongPanel extends JPanel implements Runnable {
 
 	private boolean isPaused;
 	private boolean isRunning;
+	/* ---- Used to trigger movementevents of both players simultanously ---- */
+	private boolean[] playerPushesControl;
+	private boolean[] playerDirectionLeft;
 
 	private Thread animator; // Animationthread
 	private JFrame topFrame; // saved to Update included JPanels
@@ -60,6 +63,7 @@ public class PongPanel extends JPanel implements Runnable {
 	private Graphics dbg;
 	private Image dbgImage;
 
+	private Ball ball;
 	private Brick[] tokens;
 	private int[][] controls; // contains Keycodes used for controlling the
 								// Bricks
@@ -68,6 +72,9 @@ public class PongPanel extends JPanel implements Runnable {
 
 		topFrame = caller;
 		this.period = period;
+		
+		playerPushesControl = new boolean[]{false, false};
+		playerDirectionLeft = new boolean[]{false, false};
 
 		setBackground(Color.WHITE);
 		setPreferredSize(new Dimension(WIDTH, HEIGHT));
@@ -81,8 +88,9 @@ public class PongPanel extends JPanel implements Runnable {
 		int botY = HEIGHT - 20;
 
 		tokens = new Brick[2];
-		tokens[0] = new Brick(midCanvasX, topY, WIDTH);
-		tokens[1] = new Brick(midCanvasX, botY, WIDTH);
+		tokens[PLAYER_1] = new Brick(midCanvasX, topY, WIDTH);
+		tokens[PLAYER_2] = new Brick(midCanvasX, botY, WIDTH);
+		ball = new Ball(tokens[PLAYER_1], tokens[PLAYER_2]);
 		
 		df = new DecimalFormat("0.##");
 
@@ -181,7 +189,8 @@ public class PongPanel extends JPanel implements Runnable {
 
 	private void gameUpdate() {
 		if (!isPaused) {
-
+			moveTokens();
+			ball.move();
 		}
 	}
 
@@ -208,6 +217,7 @@ public class PongPanel extends JPanel implements Runnable {
 
 		tokens[0].draw(dbg);
 		tokens[1].draw(dbg);
+		ball.draw(dbg);
 
 	}
 
@@ -223,6 +233,17 @@ public class PongPanel extends JPanel implements Runnable {
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
+		}
+	}
+	
+	public void moveTokens() {
+		
+		for (int i=0; i<2; i++) {
+			if (playerPushesControl[i])
+				if (playerDirectionLeft[i])
+					tokens[i].moveLeft();
+				else 
+					tokens[i].moveRight();
 		}
 	}
 
@@ -252,11 +273,24 @@ public class PongPanel extends JPanel implements Runnable {
 			public void keyPressed(KeyEvent e) {
 				int keyCode = e.getKeyCode();
 				int playerCode = isControl(keyCode);
-				if (playerCode == NO_PLAYER)
+				if (playerCode == NO_PLAYER) 
 					handleNonControls(keyCode, e);
-				else
-					handleControls(keyCode, playerCode);
-
+				else {
+					playerPushesControl[playerCode] = true;
+					if (controls[playerCode][0] == keyCode)
+						playerDirectionLeft[playerCode] = true;
+					else
+						playerDirectionLeft[playerCode] = false;
+				}
+			}
+		});
+		
+		addKeyListener(new KeyAdapter() {
+			public void keyReleased(KeyEvent e) {
+				int keyCode = e.getKeyCode();
+				int playerCode = isControl(keyCode);
+				if (playerCode < NO_PLAYER)
+					playerPushesControl[playerCode] = false;
 			}
 		});
 	}
@@ -276,14 +310,5 @@ public class PongPanel extends JPanel implements Runnable {
 				|| keyCode == KeyEvent.VK_END
 				|| (keyCode == KeyEvent.VK_C && e.isControlDown()))
 			isRunning = false;
-	}
-
-	private void handleControls(int keyCode, int playerCode) {
-
-		if (controls[playerCode][0] == keyCode)
-			tokens[playerCode].moveLeft();
-		else
-			tokens[playerCode].moveRight();
-
 	}
 }
