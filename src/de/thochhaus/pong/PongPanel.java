@@ -11,97 +11,100 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowEvent;
 import java.awt.event.WindowListener;
+import java.text.DecimalFormat;
 
 import javax.swing.BoxLayout;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
 
-public class PongPanel extends JFrame implements Runnable, WindowListener {
+public class PongPanel extends JPanel implements Runnable {
 
 	/*
 	 * desired UPS Period in ns, FPS will be adjusted according to the speed of
 	 * the running machine
 	 */
-	private static long period;
 
-
+	/* ---- Codes of the Players used to adress their Control setup ---- */
+	public static final int PLAYER_1 = 0; // Is always at the top of the Page
+	public static final int PLAYER_2 = 1; // Is always at the bottom of the Page
+	public static final int NO_PLAYER = 2;
+	
+	private static final int NO_DELAYS_PER_YIELD = 15;
 	private static final int MAX_FRAME_SKIPS = 5;
-	private static final int NUM_FPS = 10;
-	private static final int TIME_COLLECT_STATS = 1000;
+	private static final int TIME_COLLECT_STATS = 1000000000;
 	private static final int WIDTH = 500;
 	private static final int HEIGHT = 400;
 
-	private volatile boolean isPaused;
-	private volatile boolean isRunning;
+	private boolean isPaused;
+	private boolean isRunning;
 
 	private Thread animator; // Animationthread
+	private JFrame topFrame; // saved to Update included JPanels
 
 	private Font font;
 	private FontMetrics metrics;
+	private DecimalFormat df;
 
 	// calculate stats
-	private int statsIntervall = 0;
-	private int storeCount = 0;
-	private double[] fpsStore;
+	private long timeRunning = 0L;
+	private long prevStatsTime = 0L;
+	private int totalFrames = 0;
+	private int totalSkips = 0;
+	private long statsIntervall = 0L;
 	private double averageFPS = 0.0;
-	private double[] upsStore;
 	private double averageUPS = 0.0;
+
+	private long period;
 
 	private Graphics dbg;
 	private Image dbgImage;
-	
-	private Brick token1, token2;
 
-	public PongPanel() {
+	private Brick[] tokens;
+	private int[][] controls; // contains Keycodes used for controlling the
+								// Bricks
 
-		/* ---- Initialize Store Buffers */
-		fpsStore = new double[10];
-		upsStore = new double[10];
-		for (int i = 0; i < 10; i++) {
-			fpsStore[i] = 0.0;
-			upsStore[i] = 0.0;
-		}
+	public PongPanel(long period, JFrame caller) {
 
-		createGUI();
-		
+		topFrame = caller;
+		this.period = period;
+
 		setBackground(Color.WHITE);
 		setPreferredSize(new Dimension(WIDTH, HEIGHT));
 
 		setFocusable(true);
-		requestFocus();
 		addKeyListeners();
 
-		/*
-		 * Paint components the first time
-		 */
+		/* ---- Compute startpositions of Bricks ---- */
+		int midCanvasX = (WIDTH / 2) - (Brick.BRICK_WIDTH / 2);
+		int topY = 20;
+		int botY = HEIGHT - 20;
 
+		tokens = new Brick[2];
+		tokens[0] = new Brick(midCanvasX, topY, WIDTH);
+		tokens[1] = new Brick(midCanvasX, botY, WIDTH);
 		
+		df = new DecimalFormat("0.##");
+
+		controls = new int[][] { { KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT },
+				{ KeyEvent.VK_A, KeyEvent.VK_D } };
 	}
-	
-	private void createGUI() {
-		
-		Container c = getContentPane();
-		
-		JPanel jp = new JPanel();
-		jp.setBackground(Color.WHITE);
-		jp.setPreferredSize(new Dimension(WIDTH, HEIGHT));
-		
-		font = new Font("SansSerif", Font.BOLD, 24);
-		metrics = this.getFontMetrics(font);
 
-		c.add(jp, "Center");
-		
-		JPanel stats = new JPanel();
-		stats.setLayout(new BoxLayout(stats, BoxLayout.X_AXIS));
-		
-		JTextField sbox = new JTextField();
-		sbox.setText("SPIELSTAND");
-		sbox.setEditable(false);
-		
-		stats.add(sbox, "Center");
-		c.add(stats, "North");
-		
+	/* ---- Methods to control Game (start, pause...) ---- */
+
+	public void addNotify() {
+
+		super.addNotify();
+		requestFocus();
+		startGame();
+	}
+
+	private void startGame() {
+
+		if (animator == null) {
+			animator = new Thread(this);
+			animator.start();
+		}
 	}
 
 	public void pauseGame() {
@@ -125,6 +128,7 @@ public class PongPanel extends JFrame implements Runnable, WindowListener {
 		long excess = 0L;
 
 		beforeTime = System.nanoTime();
+		prevStatsTime = beforeTime;
 
 		isRunning = true;
 
@@ -140,16 +144,15 @@ public class PongPanel extends JFrame implements Runnable, WindowListener {
 
 			if (sleepTime > 0) {
 				try {
-					Thread.sleep(sleepTime / 1000L);
+					Thread.sleep(sleepTime / 1000000L);
 				} catch (InterruptedException e) {
 					e.printStackTrace();
 				}
 				overSleepTime = (System.nanoTime() - afterTime) - sleepTime;
 			} else {
+				++noDelays;
 				excess -= sleepTime;
 				overSleepTime = 0L;
-
-				beforeTime = System.nanoTime();
 
 				int skips = 0;
 				while (excess > period && skips < MAX_FRAME_SKIPS) {
@@ -158,17 +161,31 @@ public class PongPanel extends JFrame implements Runnable, WindowListener {
 					gameUpdate();
 					skips++;
 				}
+				totalSkips += skips;
+
+				/* ---- Give Garbage Collector a Chance to run ---- */
+				if (noDelays >= NO_DELAYS_PER_YIELD) {
+					noDelays = 0;
+					Thread.yield();
+				}
+
 			}
+
+			beforeTime = System.nanoTime();
+			calculateStats();
+
 		}
+
+		System.exit(0);
 	}
 
-	public void gameUpdate() {
+	private void gameUpdate() {
 		if (!isPaused) {
 
 		}
 	}
 
-	public void gameRender() {
+	private void gameRender() {
 		if (dbgImage == null) {
 			dbgImage = createImage(WIDTH, HEIGHT);
 			if (dbgImage == null) {
@@ -185,12 +202,16 @@ public class PongPanel extends JFrame implements Runnable, WindowListener {
 		dbg.setColor(Color.RED);
 		dbg.setFont(font);
 
-		dbg.drawString("Average FPS/UPS: " + averageFPS + "/" + averageUPS, 20,
-				20);
+		dbg.drawString(
+				"Average FPS/UPS: " + df.format(averageFPS) + "/"
+						+ df.format(averageUPS), 20, 20);
+
+		tokens[0].draw(dbg);
+		tokens[1].draw(dbg);
 
 	}
 
-	public void paintScreen() {
+	private void paintScreen() {
 
 		Graphics g;
 
@@ -207,87 +228,62 @@ public class PongPanel extends JFrame implements Runnable, WindowListener {
 
 	public void calculateStats() {
 
+		totalFrames++;
 		statsIntervall += period;
 
 		if (statsIntervall >= TIME_COLLECT_STATS) {
-			storeCount++;
+			long timeNow = System.nanoTime();
+			long realElapsedTime = timeNow - prevStatsTime;
+			timeRunning += realElapsedTime;
+
+			averageFPS = ((double) totalFrames / timeRunning) * 1000000000L; // ns
+																				// -->
+																				// secs
+			averageUPS = ((double) (totalSkips + totalFrames) / timeRunning) * 1000000000L;
+			statsIntervall = 0L;
+			prevStatsTime = timeNow;
 
 		}
 	}
 
-	public void addNotify() {
-		super.addNotify();
-		startGame();
-	}
-
-	private void startGame() {
-
-		if (animator == null) {
-			animator = new Thread(this);
-			animator.start();
-		}
-	}
-
-	/* ---- Listeners for Key and Window Events ---- */
+	/* ---- Listener and Handlers for Key Events ---- */
 	private void addKeyListeners() {
 		addKeyListener(new KeyAdapter() {
-			// listen for esc, q, end, ctrl-c on the canvas to
-			// allow a convenient exit from the full screen configuration
 			public void keyPressed(KeyEvent e) {
 				int keyCode = e.getKeyCode();
-				switch (keyCode) {
+				int playerCode = isControl(keyCode);
+				if (playerCode == NO_PLAYER)
+					handleNonControls(keyCode, e);
+				else
+					handleControls(keyCode, playerCode);
 
-				case KeyEvent.VK_LEFT:
-					token1.moveLeft();
-					break;
-				case KeyEvent.VK_RIGHT:
-					token1.moveRight();
-					break;
-				case KeyEvent.VK_ESCAPE:
-				case KeyEvent.VK_Q:
-				case KeyEvent.VK_END:
-					isRunning = false;
-					break;
-				case KeyEvent.VK_C:
-					if (e.isControlDown())
-						isRunning = false;
-					break;
-				}
 			}
 		});
 	}
 
-	public void windowActivated(WindowEvent arg0) {
-		resumeGame();
-	}
-
-	public void windowClosed(WindowEvent arg0) {
-	}
-
-	public void windowClosing(WindowEvent arg0) {
-		stopGame();
-	}
-
-	public void windowDeactivated(WindowEvent arg0) {
-		pauseGame();
-	}
-
-	public void windowDeiconified(WindowEvent arg0) {
-		resumeGame();
-	}
-
-	public void windowIconified(WindowEvent arg0) {
-		pauseGame();
-	}
-
-	public void windowOpened(WindowEvent arg0) {
-	}
-
-	public static void main() {
-		
-		period = 1000L/NUM_FPS;
-
-		PongPanel pp = new PongPanel();
+	private int isControl(int keyCode) {
+		for (int a : controls[0])
+			if (a == keyCode)
+				return PLAYER_1;
+		for (int a : controls[1])
+			if (a == keyCode)
+				return PLAYER_2;
+		return NO_PLAYER;
 	}
 	
+	private void handleNonControls(int keyCode, KeyEvent e) {
+		if (keyCode == KeyEvent.VK_ESCAPE || keyCode == KeyEvent.VK_Q
+				|| keyCode == KeyEvent.VK_END
+				|| (keyCode == KeyEvent.VK_C && e.isControlDown()))
+			isRunning = false;
+	}
+
+	private void handleControls(int keyCode, int playerCode) {
+
+		if (controls[playerCode][0] == keyCode)
+			tokens[playerCode].moveLeft();
+		else
+			tokens[playerCode].moveRight();
+
+	}
 }
