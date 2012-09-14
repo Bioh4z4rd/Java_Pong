@@ -1,7 +1,6 @@
 package de.thochhaus.pong;
 
 import java.awt.Color;
-import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.FontMetrics;
@@ -9,14 +8,10 @@ import java.awt.Graphics;
 import java.awt.Image;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
-import java.awt.event.WindowEvent;
-import java.awt.event.WindowListener;
 import java.text.DecimalFormat;
 
-import javax.swing.BoxLayout;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
-import javax.swing.JTextField;
 
 public class PongPanel extends JPanel implements Runnable {
 
@@ -29,7 +24,7 @@ public class PongPanel extends JPanel implements Runnable {
 	public static final int PLAYER_1 = 0; // Is always at the top of the Page
 	public static final int PLAYER_2 = 1; // Is always at the bottom of the Page
 	public static final int NO_PLAYER = 2;
-	
+
 	private static final int NO_DELAYS_PER_YIELD = 15;
 	private static final int MAX_FRAME_SKIPS = 5;
 	private static final int TIME_COLLECT_STATS = 1000000000;
@@ -72,9 +67,9 @@ public class PongPanel extends JPanel implements Runnable {
 
 		topFrame = caller;
 		this.period = period;
-		
-		playerPushesControl = new boolean[]{false, false};
-		playerDirectionLeft = new boolean[]{false, false};
+
+		playerPushesControl = new boolean[] { false, false };
+		playerDirectionLeft = new boolean[] { false, false };
 
 		setBackground(Color.WHITE);
 		setPreferredSize(new Dimension(WIDTH, HEIGHT));
@@ -91,7 +86,7 @@ public class PongPanel extends JPanel implements Runnable {
 		tokens[PLAYER_1] = new Brick(midCanvasX, topY, WIDTH);
 		tokens[PLAYER_2] = new Brick(midCanvasX, botY, WIDTH);
 		ball = new Ball(tokens[PLAYER_1], tokens[PLAYER_2]);
-		
+
 		df = new DecimalFormat("0.##");
 
 		controls = new int[][] { { KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT },
@@ -235,14 +230,14 @@ public class PongPanel extends JPanel implements Runnable {
 			e.printStackTrace();
 		}
 	}
-	
+
 	public void moveTokens() {
-		
-		for (int i=0; i<2; i++) {
+
+		for (int i = 0; i < 2; i++) {
 			if (playerPushesControl[i])
 				if (playerDirectionLeft[i])
 					tokens[i].moveLeft();
-				else 
+				else
 					tokens[i].moveRight();
 		}
 	}
@@ -273,7 +268,7 @@ public class PongPanel extends JPanel implements Runnable {
 			public void keyPressed(KeyEvent e) {
 				int keyCode = e.getKeyCode();
 				int playerCode = isControl(keyCode);
-				if (playerCode == NO_PLAYER) 
+				if (playerCode == NO_PLAYER)
 					handleNonControls(keyCode, e);
 				else {
 					playerPushesControl[playerCode] = true;
@@ -284,7 +279,7 @@ public class PongPanel extends JPanel implements Runnable {
 				}
 			}
 		});
-		
+
 		addKeyListener(new KeyAdapter() {
 			public void keyReleased(KeyEvent e) {
 				int keyCode = e.getKeyCode();
@@ -304,7 +299,7 @@ public class PongPanel extends JPanel implements Runnable {
 				return PLAYER_2;
 		return NO_PLAYER;
 	}
-	
+
 	private void handleNonControls(int keyCode, KeyEvent e) {
 		if (keyCode == KeyEvent.VK_ESCAPE || keyCode == KeyEvent.VK_Q
 				|| keyCode == KeyEvent.VK_END
